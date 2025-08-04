@@ -2,7 +2,7 @@ import pygame
 import os
 import random
 import csv
-
+import button
 
 pygame.init()
 
@@ -19,10 +19,17 @@ SCROLL_THRESH = 200
 ROWS = 16
 COLS = 150
 TILE_SIZE = SCREEN_HEIGHT // ROWS
-TILE_TYPES = 21
+TILE_TYPES = 22
+MAX_LEVELS = 4
 screen_scroll = 0
 bg_scroll = 0
-level = 1
+level = 3
+start_game = False
+start_intro = False
+
+start_img = pygame.image.load('img/start_btn.png').convert_alpha()
+exit_img = pygame.image.load('img/exit_btn.png').convert_alpha() 
+restart_img = pygame.image.load('img/restart_btn.png').convert_alpha()
 
 pine1_img = pygame.image.load('img/Background/pine1.png').convert_alpha()
 pine2_img = pygame.image.load('img/Background/pine2.png').convert_alpha()
@@ -42,6 +49,8 @@ moving_right = False
 shoot = False
 grenade = False
 grenade_thrown = False
+fireball = False
+
 
 
 BG = (144,203,120)
@@ -49,12 +58,17 @@ RED = (255,0,0)
 WHITE = (255,255,255)
 GREEN = (0, 255, 0)
 BLACK = (0,0,0)
+PINK = (235,65,54)
+ORANGE = (255,165,0)
+
 
 bullet_img = pygame.image.load('img/icons/bullet.png').convert_alpha()
 grenade_img = pygame.image.load('img/icons/grenade.png').convert_alpha()
 health_box_img = pygame.image.load('img/icons/health_box.png').convert_alpha()
 ammo_box_img = pygame.image.load('img/icons/ammo_box.png').convert_alpha()
 grenade_box_img = pygame.image.load('img/icons/grenade_box.png').convert_alpha()
+fire_ball_img = pygame.image.load('img/icons/fire_ball.png').convert_alpha()
+
 
 item_boxes = {
     'Health'  : health_box_img,
@@ -65,9 +79,13 @@ item_boxes = {
 
 font = pygame.font.SysFont('Futura', 30)
 
-def draw_text(text,font,text_col, x, y):
-    img = font.render(text, True, text_col)
+skill_1_img = pygame.image.load('img/skill_1.jpg').convert_alpha()
+skill_2_img = pygame.image.load('img/skill_2.jpg').convert_alpha( )
+
+def draw_text(text,font,text_col,x,y):
+    img = font.render(text,True, text_col)
     screen.blit(img, (x,y))
+
 
 
 def draw_bg():
@@ -79,10 +97,36 @@ def draw_bg():
         screen.blit(pine1_img, ((x * width) - bg_scroll * 0.7 , SCREEN_HEIGHT - pine1_img.get_height() - 150))
         screen.blit(pine2_img, ((x * width) - bg_scroll * 0.8, SCREEN_HEIGHT - pine2_img.get_height()))
 
+def reset_level():
+    enemy_group.empty()
+    bullet_group.empty()
+    grenade_group.empty()
+    explostion_group.empty()
+    item_box_group.empty()
+    decoration_group.empty()
+    water_group.empty()
+    exit_group.empty()
+    fireball_group.empty()
+    boss_group.empty()
+    sword_enemy_group.empty()
+    
+    data = []
+    for row in range(ROWS):
+        r = [-1] * COLS
+        data.append(r)
+    return data
 
+
+def draw_text1(text, font, text_col,x,y):
+    img = font.render(text,True,text_col)
+    screen.blit(img, (x - bg_scroll, y))
+
+def draw_text1(text, font, text_col, x,y):
+    img = font.render(text, True, text_col)
+    screen.blit(img, (x - bg_scroll, y))
 
 class Soldier(pygame.sprite.Sprite):
-    def __init__(self,char_type, x, y, scale, speed,ammo,grenades):
+    def __init__(self,char_type, x, y, scale, speed,ammo,grenades , custom_animation_types  = None):
         pygame.sprite.Sprite.__init__(self)
         self.alive = True
         self.speed = speed
@@ -106,12 +150,26 @@ class Soldier(pygame.sprite.Sprite):
         self.vison = pygame.Rect(0,0,150,20)
         self.idling = False
         self.idling_counter = 0
-
+        self.is_dying = False
 
         self.shooting_animation_timer = 0
+    
+        self.water_shield_active = False
+        self.water_shield_duration = 1500
+        self.water_shield_cooldown = 18000
+        self.water_shield_duration_timer = 0
+        self.water_shield_cooldown_timer = 0
+        
+        self.fireball_active = False
+        self.fireball_duration = 1000
+        self.fireball_cooldown = 25000
+        self.fireball_duration_timer = 0
+        self.fireball_cooldown_timer = 0
 
-
-        animation_types = ['Idle','Run','jumping','death','shooting']
+        if custom_animation_types:
+            animation_types = custom_animation_types
+        else:
+            animation_types = ['Idle','Run','jumping','death','shooting', 'water_shield','attack']
         for animation in animation_types:
             temp_list = []
             num_of_frames =len(os.listdir(f'img/{self.char_type}/{animation}'))
@@ -141,11 +199,20 @@ class Soldier(pygame.sprite.Sprite):
                     self.update_action(2)
                 elif self.action == 4:
                     self.update_action(0) 
+                elif self.action == 6:
+                    self.update_action(0)
 
     def move(self,moving_left,moving_right):
         screen_scroll = 0
         dx = 0
         dy = 0
+        
+        if self.alive:
+            if moving_left:
+                dx = -self.speed
+                self.flip = True
+                self.direction = -1
+       
 
         if moving_left:
             dx = -self.speed
@@ -160,7 +227,7 @@ class Soldier(pygame.sprite.Sprite):
 
         self.vel_y += GRAVITY
         if self.vel_y >= 10:
-            self.vel_y    
+            self.vel_y =  10
         dy += self.vel_y
 
 
@@ -177,10 +244,24 @@ class Soldier(pygame.sprite.Sprite):
                     dy = tile[1].top - self.rect.bottom
         
 
+
+        if pygame.sprite.spritecollide(self, water_group, False):
+            self.health = 0
+        
+        level_complete = False
+        if pygame.sprite.spritecollide(self, exit_group, False):
+            level_complete = True
+
+
+        if self.rect.bottom > SCREEN_HEIGHT:
+            self.health = 0
+
+
         if self.char_type == 'player':
             if self.rect.left + dx < 0 or self.rect.right + dx > SCREEN_WIDTH:
                  dx = 0
 
+   
 
         self.rect.x += dx
         self.rect.y += dy
@@ -193,7 +274,7 @@ class Soldier(pygame.sprite.Sprite):
                 screen_scroll = -dx
         
         
-        return screen_scroll
+        return screen_scroll, level_complete
 
     def shoot(self):
         if self.shoot_cooldown == 0 and self.ammo > 0:
@@ -203,6 +284,21 @@ class Soldier(pygame.sprite.Sprite):
             self.ammo -= 1
             self.shooting_animation_timer = 20
             self.update_action(4)
+
+
+
+    def cast_fireball(self):
+            current_time = pygame.time.get_ticks()
+            if not self.fireball_active and current_time >= self.fireball_cooldown_timer:
+                fireball_projectile = Fireball(self.rect.centerx + (0.6 * self.rect.size[0] * self.direction), self.rect.centery , self.direction)
+                fireball_group.add(fireball_projectile)
+                self.fireball_active = True
+                self.fireball_duration_timer = current_time + self.fireball_duration
+                self.fireball_cooldown_timer = current_time + self.fireball_cooldown
+                self.update_action(6)
+                self.shooting_animation_timer = 20
+
+
 
     def ai(self):
         if self.alive and player.alive:
@@ -237,7 +333,7 @@ class Soldier(pygame.sprite.Sprite):
         self.rect.x += screen_scroll
 
     def update_animation(self):
-        ANIMATION_COOLDOWN = 100
+        ANIMATION_COOLDOWN = 200
 
         self.image = self.animation_list[self.action][self.frame_index]
 
@@ -248,10 +344,17 @@ class Soldier(pygame.sprite.Sprite):
         if self.frame_index >= len(self.animation_list[self.action]):
             if self.action == 3:
                 self.frame_index = len(self.animation_list[self.action]) - 1
+            
             elif self.action == 4:
                 self.frame_index = 0
+                self.update_action(0)
+            elif self.action == 6:
+                self.frame_index = 0
+                self.update_action(0)
             else:
                 self.frame_index = 0
+
+
     def update_action(self, new_action):
         if new_action != self.action:
             self.action = new_action
@@ -266,12 +369,174 @@ class Soldier(pygame.sprite.Sprite):
             self.update_action(3)
              
 
+    def activate_water_shield(self):
+        current_time = pygame.time.get_ticks()
+        if not self.water_shield_active and current_time >= self.water_shield_cooldown_timer:
+            self.water_shield_active = True
+            self.water_shield_duration_timer = current_time + self.water_shield_duration
+            self.water_shield_cooldown_timer = current_time + self.water_shield_cooldown
+            self.update_action(5)
+    
 
-            
+    def update_skills(self):
+        current_time = pygame.time.get_ticks()
+        if self.water_shield_active:
+            if current_time >= self.water_shield_duration_timer:
+                self.water_shield_active = False
+
+                self.update_action(0)
+
+        if self.fireball_active:
+            if current_time >= self.fireball_duration_timer:
+                self.fireball_active = False
+                self.update_action(0)  
 
     def draw(self):
          screen.blit(pygame.transform.flip(self.image,self.flip,False),self.rect)
 
+class SwordEnemy(Soldier):
+    def __init__(self, x, y, scale, speed):
+        sword_enemy_animation_types = ['run']
+        super(). __init__('sword_enemy', x, y , scale. speed, 0, 0, custom_animation_types=sword_enemy_animation_types)
+        custom_animation_types = sword_enemy_animation_types
+        self.health = 100
+        self.max_health = self.health
+        self.attack_cooldown = 0
+        self.attack_range = TILE_SIZE * 1.5
+
+    def update(self):
+        super().update()
+    
+
+class Boss(pygame.sprite.Sprite):
+    def __init__(self, char_type, x, y, scale, speed , custom_animation_types = None):
+        pygame.sprite.Sprite.__init__(self)
+        self.alive = True
+        self.speed = speed
+        self.health = 999
+        self.max_health = self.health
+        self.char_type = char_type
+        self.direction = 1
+        self.vel_y = 0
+        self.jump = False
+        self.in_air = True
+        self.flip = False
+        self.animation_list = []
+        self.frame_index = 0
+        self.action = 0
+        self.update_time = pygame.time.get_ticks()
+        self.move_counter = 0
+        self.vison = pygame.Rect(0,0, 300, 50)
+        self.idling = False
+        self.idling_counter = 0
+        self.is_dying = False
+        self.attack_interval = 3000
+        self.last_attack_time = pygame.time.get_ticks()
+        self.attack_cooldown = 0
+
+        if custom_animation_types:
+            animation_types = custom_animation_types
+        else:
+            animation_types = ['idle', 'attack']
+        
+        for animation in animation_types:
+            temp_list = []
+            num_of_frames = len(os.listdir(f'img/{self.char_type}/{animation}'))
+            for i in range(num_of_frames):
+                img = pygame.image.load(f'img/{self.char_type}/{animation}/{i}.png').convert_alpha()
+                img = pygame.transform.scale(img, (int(img.get_width() * scale), int(img.get_height() * scale)))
+                temp_list.append(img)
+            self.animation_list.append(temp_list)
+
+        self.image = self.animation_list[self.action][self.frame_index]                        
+        self.rect = self.image.get_rect()
+        self.rect.center = (x,y)
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
+
+    def update(self):
+        self.update_animation()
+        self.check_alive()
+        if self.attack_cooldown > 0:
+            self.attack_cooldown -= 1
+
+
+
+    def ai(self):
+        self.rect.x += screen_scroll
+        current_time = pygame.time.get_ticks()
+        if self.alive and player.alive:
+            if current_time - self.last_attack_time > self.attack_interval:
+                self.spawn_sword_enemy
+                self.last_attack_time = current_time
+                self.update_action(1)
+                self.attack_cooldown = 60
+            elif self.action == 1 and self.attack_cooldown <= 0:
+                self.update_action(0)
+            else:
+                self.update_action(0)
+
+                   
+                
+    def spawn_sword_enemy(self):
+        spawn_x = self.rect.centerx + (self.direction * TILE_SIZE)
+        spawn_y = self.rect.bottom - TILE_SIZE
+
+        found_spawn = False
+        for _ in range(5):
+            temp_enemy = SwordEnemy(spawn_x, spawn_y, 1.2, 3)
+            temp_enemy.rect.bottom = spawn_y
+            
+            is_clear = True
+            for tile in world.obstacle_list:
+                if tile[1].colliderect(temp_enemy.rect):
+                    is_clear = False
+                    break
+                
+            if is_clear:
+                sword_enemy = SwordEnemy(spawn_x, spawn_y, 1.2, 3)
+                sword_enemy_group.add(sword_enemy)
+                found_spawn = True
+                break 
+            else:
+                spawn_x += self.direction * TILE_SIZE / 2
+                
+            
+            
+
+    def update_animation(self):
+        ANIMATION_COOLDOWN = 200
+        self.image = self.animation_list[self.action][self.frame_index]
+        if pygame.time.get_ticks() - self.update_time > ANIMATION_COOLDOWN:
+            self.update_time = pygame.time.get_ticks()
+            self.frame_index += 1
+        
+
+        if self.frame_index >= len(self.animation_list[self.action]):
+            if self.action == 3:
+                self.frame_index = len(self.animation_list[self.action]) - 1
+            else:
+                self.frame_index = 0
+    
+
+
+    def update_action(self, new_action):
+        if new_action != self.action:
+            self.action = new_action
+            self.frame_index = 0
+            self.update_time = pygame.time.get_ticks()
+
+    
+    def check_alive(self):
+        if self.health <= 0:
+            self.health = 0
+            self.speed = 0
+            self.alive =False
+            # death animation  self.update(3)
+            self.is_dying = True 
+    
+    def draw(self):
+        screen.blit(pygame.transform.flip(self.image, self.flip, False), self.rect)
 class World():
     def __init__(self):
         self.obstacle_list = []
@@ -310,6 +575,9 @@ class World():
                     elif tile == 20:
                         exit = Exit(img, x * TILE_SIZE, y * TILE_SIZE)
                         exit_group.add(exit)
+                    elif tile == 21:
+                        boss = Boss('boss', x * TILE_SIZE, y * TILE_SIZE, 2 , 1)
+                        boss_group.add(boss)
 
         return player, health_bar
     
@@ -408,7 +676,7 @@ class Bullet(pygame.sprite.Sprite):
             if tile[1].colliderect(self.rect):
                 self.kill()
         if pygame.sprite.spritecollide(player, bullet_group, False):
-            if player.alive:
+            if player.alive and not player.water_shield_active:
                 player.health -= 5
                 self.kill()
         for enemy in enemy_group:
@@ -417,7 +685,11 @@ class Bullet(pygame.sprite.Sprite):
                             enemy.health -= 25
                             self.kill()
             
-
+        for boss_enemy in boss_group:
+            if pygame.sprite.spritecollide(boss_enemy, bullet_group, False):
+                if boss_enemy.alive:
+                    boss_enemy.health -= 10
+                    self.kill()
 class Grenade(pygame.sprite.Sprite):
     def __init__(self,x,y,direction):
         pygame.sprite.Sprite.__init__(self)
@@ -442,7 +714,6 @@ class Grenade(pygame.sprite.Sprite):
             if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
                 self.direction *= -1
                 dx = self.direction * self.speed
-
             if tile[1].colliderect(self.rect.x, self.rect.y + dy,self.width , self.height):
                 self.speed = 0
 
@@ -455,6 +726,9 @@ class Grenade(pygame.sprite.Sprite):
                     dy = tile[1].top - self.rect.bottom
 
 
+        level_complete = False
+        if pygame.sprite.spritecollide( self, exit_group, False):
+            level_complete = True
        
         self.rect.x += dx + screen_scroll
         self.rect.y += dy
@@ -467,15 +741,45 @@ class Grenade(pygame.sprite.Sprite):
 
             if abs(self.rect.centerx - player.rect.centerx) < TILE_SIZE * 2 and \
                     abs(self.rect.centery - player.rect.centery) < TILE_SIZE * 2:
-                    player.health -= 50
+                    if not player.water_shield_active:
+                        player.health -= 50
             for enemy in enemy_group:
                 if abs(self.rect.centerx - enemy.rect.centerx) < TILE_SIZE * 2 and \
                         abs(self.rect.centery - enemy.rect.centery) < TILE_SIZE * 2:
                         enemy.health -= 50
 
+            for boss_enemy in boss_enemy:
+                if abs(self.rect.centerx - boss_enemy.rect.centerx) < TILE_SIZE * 2 and \
+                    abs(self.rect.centery - boss_enemy.rect.centery) < TILE_SIZE * 2:
+                        boss_enemy.health -= 25
+                
+class Fireball(pygame.sprite.Sprite):
+    def __init__(self, x, y, direction):
+        pygame.sprite.Sprite.__init__(self)
+        self.speed = 15
+        self.image = fire_ball_img
+        self.rect = self.image.get_rect()
+        self.rect.center = (x,y)
+        self.direction = direction
+        self.flip = True if direction == -1 else False
 
 
+    def update(self):
+        self.rect.x += (self.direction * self.speed) + screen_scroll
+        if self.rect.right < 0 or self.rect.left > SCREEN_WIDTH:
+            self.kill()  
 
+        hit_enemies = pygame.sprite.spritecollide(self, enemy_group, False)
+        for enemy in hit_enemies:
+            if enemy.alive:
+                enemy.health -= 100
+        hit_bosses = pygame.sprite.spritecollide(self, boss_group, False)
+        for boss_enemy in hit_bosses:
+            if boss_enemy.alive:
+                boss_enemy.health -= 50
+
+    def draw(self, surface):
+        surface.blit(pygame.transform.flip(self.image , self.flip, False), self.rect) 
 
 class Explosion(pygame.sprite.Sprite):
     def __init__(self,x,y,scale):
@@ -506,8 +810,36 @@ class Explosion(pygame.sprite.Sprite):
                 self.image = self.images[self.frame_index]
 
 
+class ScreenFade():
+    def __init__(self, direction, colour, speed):
+        self.direction = direction
+        self.color = colour
+        self.speed = speed
+        self.fade_counter = 0
+
+    def fade(self):
+        fade_complete = False
+        self.fade_counter += self.speed
+        if self.direction == 1:
+            pygame.draw.rect(screen , self.color, (0 - self.fade_counter ,0, SCREEN_WIDTH // 2, SCREEN_HEIGHT))
+            pygame.draw.rect(screen, self.color, (SCREEN_WIDTH // 2 + self.fade_counter, 0 , SCREEN_WIDTH, SCREEN_HEIGHT))
+            pygame.draw.rect(screen, self.color, (0,0 - self.fade_counter, SCREEN_WIDTH, SCREEN_HEIGHT // 2 ))
+            pygame.draw.rect( screen, self.color, (0, SCREEN_HEIGHT // 2 + self.fade_counter, SCREEN_WIDTH, SCREEN_HEIGHT ))
+        if self.direction == 2:
+            pygame.draw.rect(screen, self.color, (0,0, SCREEN_WIDTH, 0 +  self.fade_counter))
+        if self.fade_counter >= SCREEN_WIDTH:
+            fade_complete = True  
+        
+        return fade_complete
+
+intro_fade = ScreenFade(1, BLACK, 4)
+death_fade = ScreenFade(2, PINK, 4)
 
 
+
+start_button = button.Button(SCREEN_WIDTH // 2 - 130, SCREEN_HEIGHT // 2 - 150, start_img, 1)
+exit_button = button.Button(SCREEN_WIDTH // 2 - 110, SCREEN_HEIGHT // 2 +  110,exit_img, 1 )
+restart_button = button.Button(SCREEN_WIDTH  // 2 - 100, SCREEN_HEIGHT // 2 - 50, restart_img, 1)
 
 enemy_group = pygame.sprite.Group()
 bullet_group = pygame.sprite.Group()
@@ -517,6 +849,10 @@ item_box_group = pygame.sprite.Group()
 decoration_group = pygame.sprite.Group()
 water_group = pygame.sprite.Group()
 exit_group = pygame.sprite.Group()
+fireball_group = pygame.sprite.Group()
+boss_group = pygame.sprite.Group()
+sword_enemy_group = pygame.sprite.Group()
+
 
 world_data = []
 for row in range(ROWS):
@@ -532,81 +868,231 @@ world = World()
 player , health_bar = world.process_data(world_data)
 
 
-enemy = Soldier('enemy',500,200,1.65,2,20,0)
-enemy2 = Soldier('enemy',300,200,1.65,2,20,0)
-enemy_group.add(enemy)
-enemy_group.add(enemy2)
 
 
 
+water_shield_icon = pygame.Surface((TILE_SIZE , TILE_SIZE), pygame.SRCALPHA)
+pygame.draw.rect(water_shield_icon, (0,100,255,180), water_shield_icon.get_rect(), border_radius=5)
+pygame.draw.circle(water_shield_icon , (200,230,255,200), (TILE_SIZE // 2, TILE_SIZE // 2), TILE_SIZE // 3)
 
 
+def draw_inventory(player):  
+    inventory_height = 70
+    inventory_bottom = 20
+    inventory_rect = pygame.Rect(0, SCREEN_HEIGHT - inventory_height - inventory_bottom,SCREEN_WIDTH, inventory_height)
+    
+    inventory_surface = pygame.Surface(inventory_rect.size, pygame.SRCALPHA)
+
+    inventory_surface.fill((50,50,50,180))
+    screen.blit(inventory_surface, inventory_rect.topleft)
+
+    skill_slot_x = 20
+    skill_slot_y = SCREEN_HEIGHT - inventory_height  - inventory_bottom + 10
+    skill_slot_size = 50
+
+    water_shield_slot_rect = pygame.Rect(skill_slot_x, skill_slot_y, skill_slot_size, skill_slot_size)
+    pygame.draw.rect(screen, (100,100,100), water_shield_slot_rect, 2)
+   
+    screen.blit(pygame.transform.scale(skill_1_img, (skill_slot_size, skill_slot_size)), water_shield_slot_rect.topleft)
+
+    current_time = pygame.time.get_ticks()
+    cooldown_remaining = max(0, player.water_shield_cooldown_timer - current_time)
+
+    if cooldown_remaining > 0:
+        cooldown_ratio = cooldown_remaining / player.water_shield_cooldown
+        cooldown_height = skill_slot_size * cooldown_ratio
+        cooldown_rect = pygame.Rect(skill_slot_x, skill_slot_y + (skill_slot_size - cooldown_height) , skill_slot_size, cooldown_height)
+        pygame.draw.rect(screen, (0,0,0,180), cooldown_rect)
+        draw_text(f'{int(cooldown_remaining / 1000) + 1}', font, WHITE, skill_slot_x + skill_slot_size // 2 - 10, skill_slot_y + skill_slot_size // 2 - 10)
+    
+
+    if player.water_shield_active:
+        duration_remaining = max(0, player.water_shield_duration_timer - current_time)
+        
+        shield_surface = pygame.Surface((player.rect.width * 1.5, player.rect.height * 1.5) , pygame.SRCALPHA)
+        pygame.draw.circle(shield_surface, (0,150,255,100), (shield_surface.get_width() // 2, shield_surface.get_height() // 2), min(shield_surface.get_width(), shield_surface.get_height()) // 2)
+
+        alpha = int(100 + 50 * abs(pygame.time.get_ticks() % 1000 - 500) / 500)
+        shield_surface.set_alpha(alpha)
+
+        screen.blit(shield_surface , (player.rect.centerx - shield_surface.get_width() // 2, player.rect.centery  - shield_surface.get_height() // 2))       
+          
+        draw_text(f'{int(duration_remaining / 1000) + 1}',font, (255,255,0), skill_slot_x + skill_slot_size // 2 - 10, skill_slot_y + skill_slot_size // 2-10)
+
+    fireball_slot_x = skill_slot_x + skill_slot_size + 20
+    fireball_slot_rect = pygame.Rect(fireball_slot_x, skill_slot_y , skill_slot_size, skill_slot_size)
+    pygame.draw.rect(screen, (100,100,100), fireball_slot_rect, 2)
+
+    screen.blit(pygame.transform.scale(skill_2_img , (skill_slot_size , skill_slot_size)) , fireball_slot_rect.topleft)
+    fireball_cooldown_remaining = max(0, player.fireball_cooldown_timer - current_time)
+    
+    if fireball_cooldown_remaining > 0:
+        fireball_cooldown_ratio = fireball_cooldown_remaining / player.fireball_cooldown
+        fireball_cooldown_height = skill_slot_size * fireball_cooldown_ratio 
+        fireball_cooldown_rect = pygame.Rect(fireball_slot_x, skill_slot_y + (skill_slot_size -   fireball_cooldown_height), skill_slot_size , fireball_cooldown_height)
+        draw_text(f'{int (fireball_cooldown_remaining / 1000) + 1}', font, WHITE, fireball_slot_x + skill_slot_size // 2 - 10, skill_slot_y + skill_slot_size // 2 - 10)
+
+
+    if player.fireball_active:
+        fireball_duration_remaining = max(0,player.fireball_duration_timer - current_time )
+        draw_text(f'{int(fireball_duration_remaining / 1000) + 1}', font, (255,255,0), fireball_slot_x + skill_slot_size // 2 - 1, skill_slot_y + skill_slot_size // 2 - 10)
+
+
+
+    separator_x = skill_slot_x + skill_slot_size + 10
+    pygame.draw.line(screen, WHITE, (separator_x, skill_slot_y) , (separator_x, skill_slot_y + skill_slot_size), 2)
+
+
+    
 run = True
 while run: 
     clock.tick(FPS)
 
-    draw_bg()
-    world.draw()
-    health_bar.draw(player.health)
-    draw_text(f'AMMO: ' , font, WHITE, 10 , 35)
-    for x in range(player.ammo):
-        screen.blit(bullet_img, (90 +( x * 10), 40))
+    if start_game == False:
 
-    draw_text(f'GRENADES:', font , WHITE, 10,60)
-    for x in range(player.grenades):
-        screen.blit(grenade_img, (135 + (x * 15), 60))
-    
-    player.update()
-    player.draw()
+        screen.fill(BG)
+        if start_button.draw(screen):
+            start_game = True
+            start_intro = True
+        if exit_button.draw(screen):
+            run = False
+    else:
+        draw_bg()
+        world.draw()
+        health_bar.draw(player.health)
+        draw_text('AMMO: ' , font, WHITE, 10 , 35)
+        for x in range(player.ammo):
+            screen.blit(bullet_img, (90 +( x * 10), 40))
 
-    for enemy in enemy_group:
-        enemy.ai()
-        enemy.update()
-        enemy.draw()
-
-    bullet_group.update()
-    grenade_group.update()
-    explostion_group.update()
-    bullet_group.draw(screen)
-    grenade_group.draw(screen)
-    explostion_group.draw(screen)
-    item_box_group.update()
-    decoration_group.update()
-    water_group.update()
-    exit_group.update()
-    bullet_group.draw(screen)
-    grenade_group.draw(screen)
-    explostion_group.draw(screen)
-    item_box_group.draw(screen)
-    decoration_group.draw(screen)
-    water_group.draw(screen)
-    exit_group.draw(screen)
-    
-
-    if player.alive:
-        if shoot:
-            player.shoot()
-        elif grenade and grenade_thrown == False and player.grenades > 0:
-            grenade = Grenade(player.rect.centerx + (0.5 * player.rect.size[0] * player.direction),\
-			 			player.rect.top, player.direction)
-            grenade_group.add(grenade)
-            player.grenades -= 1
-            grenade_thrown = True
-            print(player.grenades)
-
-
-        if shoot and player.ammo > 0:
-            player.update_action(4)
-        elif player.in_air:
-            player.update_action(2)  
-        elif moving_left or moving_right:
-            player.update_action(1)
+        draw_text('GRENADES:', font , WHITE, 10,60)
+        for x in range(player.grenades):
+            screen.blit(grenade_img, (135 + (x * 15), 60))  
+        if level == 1:      
+            draw_text1('W,A,S,D TO MOVE AND SPACEBAR TO SHOOT', font, WHITE, 200, 300)
+            draw_text1(' Press Q TO THROW A GRENADE', font,WHITE,1000,200)
+            player.update()
+            player.draw()
+        elif level == 2:
+            draw_text1('level 2: Watch out for enemies!', font, WHITE, 200,300)
+            player.update()
+            player.draw()
         else:
-            player.update_action(0)
-        screen_scroll = player.move(moving_left,moving_right)
-        bg_scroll -= screen_scroll
-     
+            player.update()
+            player.draw()
+
+        for boss_enemy in boss_group:
+            boss_enemy.ai()
+            boss_enemy.update()
+            boss_enemy.draw()
+
+        for enemy in enemy_group:    
+            enemy.ai()
+            enemy.update()
+            enemy.draw()
         
+        for sword_enemy in sword_enemy_group:
+            sword_enemy.update()
+            sword_enemy.draw()
+
+        bullet_group.update()
+        grenade_group.update()
+        explostion_group.update()
+        bullet_group.draw(screen)
+        grenade_group.draw(screen)
+        explostion_group.draw(screen)
+        item_box_group.update()
+        decoration_group.update()
+        water_group.update()
+        exit_group.update()
+        fireball_group.update()
+        
+        bullet_group.draw(screen)
+        grenade_group.draw(screen)
+        explostion_group.draw(screen)
+        item_box_group.draw(screen)
+        decoration_group.draw(screen)
+        water_group.draw(screen)
+        exit_group.draw(screen)
+        fireball_group.draw(screen)
+
+
+
+        if start_intro == True:
+            if intro_fade.fade():
+                start_intro = False
+                intro_fade.fade_counter = 0
+
+        
+
+        for fireball_obj in fireball_group:
+            fireball_obj.draw(screen)
+
+
+        player.update_skills()
+        draw_inventory(player)
+
+
+        if player.alive:
+            if player.water_shield_active:
+                player.update_action(5)
+            elif player.fireball_active:
+                player.update_action(6)
+            elif player.in_air:
+                player.update_action(2)
+            elif moving_left or moving_right:
+                player.update_action(1)
+            else:
+                player.update_action(0)
+            if shoot:
+                player.shoot()
+                player.update_action(4)
+            if grenade and grenade_thrown == False and player.grenades > 0:
+                grenade = Grenade(player.rect.centerx + (0.5 * player.rect.size[0] * player.direction),\
+                            player.rect.top, player.direction)
+                grenade_group.add(grenade)
+                player.grenades -= 1
+                grenade_thrown = True
+                print(player.grenades)
+
+            if fireball:
+                player.cast_fireball()
+                fireball = False
+        
+            screen_scroll, level_complete = player.move(moving_left,moving_right)
+            bg_scroll -= screen_scroll
+            if level_complete:
+                start_intro = True
+                level += 1
+                bg_scroll = 0
+                world_data = reset_level()
+                if level <= MAX_LEVELS:
+                    with open(f'level{level}_data.csv' , newline = '') as csvfile:
+                        reader = csv.reader(csvfile, delimiter = ',')
+                        for x, row in enumerate(reader):
+                            for y, tile in enumerate(row):
+                                world_data[x][y] = int(tile)
+                        
+                        world = World()
+                        player, health_bar = world.process_data(world_data)
+        else:
+            screen_scroll = 0
+            if death_fade.fade():
+
+                if restart_button.draw(screen) and not player.alive:
+                    death_fade.fade_counter = 0
+                    start_intro = True
+                    bg_scroll = 0   
+                    world_data =  reset_level()
+            
+
+                    with open (f'level{level}_data.csv', newline='') as csvfile:
+                        reader = csv.reader(csvfile, delimiter = ',')
+                        for x, row in enumerate(reader):
+                                for y, tile in enumerate(row):
+                                    world_data[x][y] = int(tile)
+                    world = World()
+                    player, health_bar = world.process_data(world_data)
+       
         keys = pygame.key.get_pressed()
         if keys[pygame.K_w] and not player.in_air:
             player.vel_y = -11
@@ -625,12 +1111,14 @@ while run:
                 shoot = True
             if event.key == pygame.K_q:
                 grenade = True
+            if event.key == pygame.K_1:
+                player.activate_water_shield()
+            if event.key == pygame.K_2:
+                fireball = True
             if event.key == pygame.K_ESCAPE:
                 run = False
 
       
-
-
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_a:
                 moving_left = False

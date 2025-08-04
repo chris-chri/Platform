@@ -17,14 +17,13 @@ SCREEN_HEIGHT = 640
 LOWER_MARGIN = 100
 SIDE_MARGIN = 300
 
-
 screen = pygame.display.set_mode((SCREEN_WIDTH + SIDE_MARGIN, SCREEN_HEIGHT + LOWER_MARGIN))
 pygame.display.set_caption('Level Editor')
 
 ROWS = 16
 MAX_COLS = 150
 TITLE_SIZE = SCREEN_HEIGHT // ROWS
-TITLE_TYPES = 21
+TITLE_TYPES = 22
 level = 0
 current_tile = 0
 scroll_left = False
