@@ -17,7 +17,7 @@ cd Platform
    python main.py
    ```
 ## Controls 
-- ** W, A, S, D**: Move
+**W, A, S, D**: Move
 - **SPACE**: Shoot
 - **Q**: Throw grenade
 - **s**: Toggle Shop
