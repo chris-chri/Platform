@@ -16,3 +16,10 @@ cd Platform
    ```sh
    python main.py
    ```
+## Controls 
+- ** W, A, S, D**: Move
+- **SPACE**: Shoot
+- **Q**: Throw grenade
+- **s**: Toggle Shop
+- **1**: Activate Water Shield
+- **2**: Cast Fireball
