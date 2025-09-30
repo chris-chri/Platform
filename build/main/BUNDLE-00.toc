@@ -1,0 +1,3 @@
+([('main',
+   '/Users/christianndjeka/Library/CloudStorage/OneDrive-Personal/platform/dist/main',
+   'EXECUTABLE')],)
