@@ -10,7 +10,7 @@ git clone https://github.com/chris-chri/Platform.git
 cd Platform
 ```
 
-2. **Install Python 3 and pip (MacOS) or Python and pip (Windows) (if not already installed).**
+2. **Install Python 3 and pip (MacOS / Linux) or Python and pip (Windows) (if not already installed).**
 
 3. **Install dependencies**
    ```sh
