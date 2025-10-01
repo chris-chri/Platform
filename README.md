@@ -1,7 +1,8 @@
 # Platform Shooter Game
 
 A Platform shooter game built with python and Pygame.
-
+## For the people Who dont want to download the game
+Watch the gameplay of the game there:https://youtu.be/r0x6_y5cyIE
 ## How to Run
 
 1. **Clone the repository:**
