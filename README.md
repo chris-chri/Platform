@@ -15,6 +15,7 @@ cd Platform
 python -m pip install --upgrade pip
 python -m pip install pygame
 ```
+macOS/Linux: Install Python 3 using Homebrew or your package manager.
 
 4. **Install dependencies**
    ```sh
