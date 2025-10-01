@@ -11,8 +11,12 @@ cd Platform
 ```
 
 2. **Install Python 3 and pip (MacOS / Linux) or Python and pip (Windows) (if not already installed).**
+ ```sh
+python -m pip install --upgrade pip
+python -m pip install pygame
+```
 
-3. **Install dependencies**
+4. **Install dependencies**
    ```sh
    python main.py
    ```
