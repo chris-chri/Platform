@@ -17,7 +17,7 @@ python -m pip install pygame
 ```
 macOS/Linux: Install Python 3 using Homebrew or your package manager.
 
-4. **Install dependencies**
+4. **Run The Game**
    ```sh
    python main.py
    ```
