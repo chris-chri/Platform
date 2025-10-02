@@ -1,9 +1,12 @@
 # Platform Shooter Game
 
 A Platform shooter game built with python and Pygame.
-## For the people Who dont want to download the game
+## For the people Who dont want to download the game or to people who want to know how to kill the Boss
 Watch the gameplay of the game there:https://youtu.be/r0x6_y5cyIE
-## How to Run
+
+## Download the game 
+MacOS : https://github.com/chris-chri/Platform/releases/tag/v1.0.0
+## How to Run It Locally
 
 1. **Clone the repository:**
 ```sh
